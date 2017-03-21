@@ -305,6 +305,7 @@ public class VmBix {
         + "datacenter.discovery                                        \n"
         + "datacenter.status[name,(overall|config)]                    \n"
         + "datastore.discovery                                         \n"
+        + "datastore.guest.discovery                                   \n"
         + "datastore.local[(uuid|name)]                                \n"
         + "datastore.size[(uuid|name),free]                            \n"
         + "datastore.size[(uuid|name),total]                           \n"
@@ -343,6 +344,7 @@ public class VmBix {
         + "vm.cpu.load[(uuid|name),used]                               \n"
         + "vm.discovery[*]                                             \n"
         + "vm.discovery.full[*]                                        \n"
+        + "vm.guest.datastore.discovery[*]                             \n"
         + "vm.folder[(uuid|name)]                                      \n"
         + "vm.uptime[(uuid|name)]                                      \n"
         + "vm.name[(uuid|name)]                                        \n"
@@ -634,6 +636,7 @@ public class VmBix {
       Pattern pVmGuestHostName           = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.guest\\.name\\[(.+)\\]");
       Pattern pVmGuestDisks              = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.guest\\.disk\\.all\\[(.+)\\]");
       Pattern pVmGuestDisksDiscovery     = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.guest\\.disk\\.discovery\\[(.+)\\]");
+      Pattern pVmGuestDatastoreDiscovery = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.guest\\.datastore\\.discovery\\[(.+)\\]");
       Pattern pVmGuestDiskCapacity       = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.guest\\.disk\\.capacity\\[(.+),(.+)\\]");
       Pattern pVmGuestDiskFreeSpace      = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.guest\\.disk\\.free\\[(.+),(.+)\\]");
       Pattern pVmAvailablePerfCounters   = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.counter\\.list\\[(.+)\\]");
@@ -649,6 +652,7 @@ public class VmBix {
       Pattern pDatastoreTotal            = Pattern.compile("^(?:\\s*ZBXD.)?.*datastore\\.size\\[(.+),total\\]");
       Pattern pDatastoreProvisioned      = Pattern.compile("^(?:\\s*ZBXD.)?.*datastore\\.size\\[(.+),provisioned\\]");
       Pattern pDatastoreUncommitted      = Pattern.compile("^(?:\\s*ZBXD.)?.*datastore\\.size\\[(.+),uncommitted\\]");
+      Pattern pDatastoreGuests           = Pattern.compile("^(?:\\s*ZBXD.)?.*datastore\\.guest\\.discovery\\[(.+)\\]");
 
       String found;
       String[] founds;
@@ -1057,6 +1061,11 @@ public class VmBix {
         getVmGuestDisks(found, out);
         return;
       }
+      found = checkPattern(pVmGuestDatastoreDiscovery, string);
+      if (found != null) {
+        getGuestDatastores(found, out);
+        return;
+      }
       founds = checkMultiplePattern(pVmGuestDiskCapacity, string);
       if (founds != null) {
         getVmGuestDiskCapacity(founds[0], founds[1], out);
@@ -1130,6 +1139,11 @@ public class VmBix {
       found = checkPattern(pDatastoreUncommitted, string);
       if (found != null) {
         getDatastoreSizeUncommitted(found, out);
+        return;
+      }
+      found = checkPattern(pDatastoreGuests, string);
+      if (found != null) {
+        getDatastoreGuests(found, out);
         return;
       }
 
@@ -3796,6 +3810,72 @@ public class VmBix {
       }
     }
 
+    /***
+     *
+     * @param vmName
+     * @param out
+     * @throws IOException
+     * Discover guest's datastores
+     */
+    private void getGuestDatastores(String vmName, PrintWriter out) throws  IOException {
+      try {
+        VirtualMachine vm = (VirtualMachine) getManagedEntity(vmName, "VirtualMachine");
+          if ( vm == null ) {
+            LOG.warn("No such Virtual Machine '" + vmName + "'found");
+          } else {
+            JsonArray jArray = new JsonArray();
+            Datastore[] dsList = vm.getDatastores();
+            for ( int i = 0; i < dsList.length; i++) {
+              Datastore ds = (Datastore) dsList[i];
+              if ( ds != null) {
+                JsonObject jObject = new JsonObject();
+                jObject.addProperty( "{#DATASTORE}", ds.getName());
+                jArray.add(jObject);
+              }
+            }
+            JsonObject jOutput = new JsonObject();
+            jOutput.add("data", jArray);
+            out.print(jOutput);
+            out.flush();
+          }
+          }
+      catch (Exception ex) {
+        LOG.error("An error occurred : " + ex.toString());
+      }
+      }
+
+
+    /**
+     * Discover guests on a datastore
+     */
+
+    private void getDatastoreGuests(String dsName, PrintWriter out) throws IOException {
+      try {
+        Datastore ds = (Datastore) getManagedEntity(dsName, "Datastore");
+        if (ds == null) {
+          LOG.warn("No datastore named '" + dsName + "' found");
+        } else {
+          JsonArray jArray = new JsonArray();
+          ManagedEntity[] vmList = ds.getVms();
+           for ( int i = 0; i < vmList.length ; i++){
+            VirtualMachine m = (VirtualMachine) vmList[i];
+            if ( m != null ){
+              JsonObject jObject = new JsonObject();
+              jObject.addProperty("{#VIRTUALMACHINE}", m.getName());
+              jArray.add(jObject);
+            }
+           }
+          JsonObject jOutput = new JsonObject();
+          jOutput.add("data", jArray);
+          out.print(jOutput);
+          out.flush();
+        }
+      }
+      catch ( Exception ex) {
+        LOG.error("An error occured : " + ex.toString());
+      }
+    }
+
     /**
      * Returns 1 if the datastore is local
      */
@@ -3964,7 +4044,7 @@ public class VmBix {
 	      ClusterComputeResource cl = (ClusterComputeResource) getManagedEntityByName(name, "ClusterComputeResource");
 	      long cpuUsage = 0;
 	      if (cl != null) {
-	        cpuUsage = cl.getSummary().totalCpu - cl.getSummary().effectiveCpu;
+            cpuUsage = cl.getResourcePool().getRuntime().getCpu().overallUsage;
 	      } else {
 	        LOG.warn("No cluster named '" + name + "' found");
 	      }
@@ -4062,11 +4142,12 @@ public class VmBix {
      */
     private void getClusterMemUsage(String name, PrintWriter out) throws IOException {
     	try {
-	      //effectiveMemory returned in MB
+	      //Close to real-time resource usage of all running child virtual machines, including virtual machines in child resource pools.
 	      ClusterComputeResource cl = (ClusterComputeResource) getManagedEntityByName(name, "ClusterComputeResource");
+
 	      long memUsage = 0;
 	      if (cl != null) {
-	        memUsage = cl.getSummary().totalMemory - (cl.getSummary().effectiveMemory * 1024 * 1024);
+            memUsage = cl.getResourcePool().getRuntime().getMemory().overallUsage;
 	      } else {
 	        LOG.warn("No cluster named '" + name + "' found");
 	      }
