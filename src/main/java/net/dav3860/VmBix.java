@@ -3821,10 +3821,9 @@ public class VmBix {
             for ( int i = 0; i < vmDataStores.length; i++) {
               VirtualMachineStorageInfo vmDsInfo = vm.getStorage();
               VirtualMachineUsageOnDatastore[] vmUsageOnDs = vmDsInfo.getPerDatastoreUsage();
-              String dsname = vmDataStores[i].getName();
               if ( dsname != null & dsname.equals(vm.getDatastores()[i].getName())) {
                 JsonObject jObject = new JsonObject();
-                jObject.addProperty("{#DATASTORE}", dsname);
+                jObject.addProperty("{#DATASTORE}", vmDataStores[i].getName());
                 jObject.addProperty("{#USAGE}", vmUsageOnDs[i].getCommitted());
                 jArray.add(jObject);
               }
