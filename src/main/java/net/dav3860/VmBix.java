@@ -348,7 +348,7 @@ public class VmBix {
         + "vm.uptime[(uuid|name)]                                      \n"
         + "vm.name[(uuid|name)]                                        \n"
         + "vm.annotation[(uuid|name)]                                  \n"
-        + "vm.guest.datastore.discovery[*]                             \n"
+        + "vm.guest.ds.discovery[*]                                    \n"
         + "vm.guest.disk.discovery[(uuid|name)]                        \n"
         + "vm.guest.disk.capacity[(uuid|name),disk]                    \n"
         + "vm.guest.disk.free[(uuid|name),disk]                        \n"
@@ -636,7 +636,7 @@ public class VmBix {
       Pattern pVmGuestHostName           = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.guest\\.name\\[(.+)\\]");
       Pattern pVmGuestDisks              = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.guest\\.disk\\.all\\[(.+)\\]");
       Pattern pVmGuestDisksDiscovery     = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.guest\\.disk\\.discovery\\[(.+)\\]");
-      Pattern pVmGuestDatastoreDiscovery = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.guest\\.datastore\\.discovery\\[(.+)\\]");
+      Pattern pVmGuestDatastoreDiscovery = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.guest\\.ds\\.discovery\\[(.+)\\]");
       Pattern pVmGuestDiskCapacity       = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.guest\\.disk\\.capacity\\[(.+),(.+)\\]");
       Pattern pVmGuestDiskFreeSpace      = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.guest\\.disk\\.free\\[(.+),(.+)\\]");
       Pattern pVmAvailablePerfCounters   = Pattern.compile("^(?:\\s*ZBXD.)?.*vm\\.counter\\.list\\[(.+)\\]");
@@ -3810,26 +3810,22 @@ public class VmBix {
       }
     }
 
-    /***
-     *
-     * @param vmName
-     * @param out
-     * @throws IOException
-     * Discover guest's datastores
-     */
-    private void getGuestDatastores(String vmName, PrintWriter out) throws  IOException {
+   private void getGuestDatastores(String vmName, PrintWriter out) throws  IOException {
       try {
         VirtualMachine vm = (VirtualMachine) getManagedEntity(vmName, "VirtualMachine");
           if ( vm == null ) {
             LOG.warn("No such Virtual Machine '" + vmName + "'found");
           } else {
             JsonArray jArray = new JsonArray();
-            Datastore[] dsList = vm.getDatastores();
-            for ( int i = 0; i < dsList.length; i++) {
-              Datastore ds = (Datastore) dsList[i];
-              if ( ds != null) {
+            Datastore[] vmDataStores = vm.getDatastores();
+            for ( int i = 0; i < vmDataStores.length; i++) {
+              VirtualMachineStorageInfo vmDsInfo = vm.getStorage();
+              VirtualMachineUsageOnDatastore[] vmUsageOnDs = vmDsInfo.getPerDatastoreUsage();
+              String dsname = vmDataStores[i].getName();
+              if ( dsname != null & dsname.equals(vm.getDatastores()[i].getName())) {
                 JsonObject jObject = new JsonObject();
-                jObject.addProperty( "{#DATASTORE}", ds.getName());
+                jObject.addProperty("{#DATASTORE}", dsname);
+                jObject.addProperty("{#USAGE}", vmUsageOnDs[i].getCommitted());
                 jArray.add(jObject);
               }
             }
